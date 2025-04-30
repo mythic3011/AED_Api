@@ -30,6 +30,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir geoalchemy2==0.13.0 && \
     pip install --no-cache-dir psycopg2-binary==2.9.6
 
+# Install zeabur CLI tool
+RUN curl -fsSL https://cli.zeabur.com/install.sh | sh
+
 # Copy application code
 COPY . .
 
@@ -44,3 +47,7 @@ CMD ["sh", "start.sh"]
 
 # Expose the API port
 EXPOSE 8000
+
+# Add zeabur deployment script
+COPY zeabur_deploy.sh /app/zeabur_deploy.sh
+RUN chmod +x /app/zeabur_deploy.sh

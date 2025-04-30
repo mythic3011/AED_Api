@@ -8,6 +8,8 @@ services:
       - POSTGRES_USER=${DB_USER:-postgres}
       - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
       - POSTGRES_DB=${DB_NAME:-aed_db}
+      - POSTGRES_SUPERUSER=${POSTGRES_SUPERUSER:-postgres}
+      - POSTGRES_SUPERUSER_PASSWORD=${POSTGRES_SUPERUSER_PASSWORD:-postgres}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -35,6 +37,8 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
       - DB_NAME=${DB_NAME:-aed_db}
       - DB_HOST=db
+      - POSTGRES_SUPERUSER=${POSTGRES_SUPERUSER:-postgres}
+      - POSTGRES_SUPERUSER_PASSWORD=${POSTGRES_SUPERUSER_PASSWORD:-postgres}
     ports:
       - "8000:8000"
     volumes:
