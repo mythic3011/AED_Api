@@ -140,6 +140,8 @@ setup_postgis()
 # Include routes
 app.include_router(aeds.router, prefix="/api/v1/aeds", tags=["AEDs"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
+from app.routes import utils
+app.include_router(utils.router, prefix="/api/v1/utils", tags=["Utilities"])
 
 # Root redirect to API documentation
 @app.get("/", include_in_schema=False)
@@ -147,6 +149,32 @@ async def root_redirect():
     """Redirect root path to API documentation"""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/api/v1/docs")
+
+@app.get("/api/v1", response_model=Dict[str, Any])
+async def api_info(request: Request):
+    """
+    Get information about the API service
+    
+    Returns basic information about the API, including version, documentation links,
+    and available endpoints.
+    """
+    return {
+        "name": "AED Location API",
+        "version": "1.0.0",
+        "description": "API to retrieve and report Automated External Defibrillator (AED) locations in Hong Kong",
+        "documentation": {
+            "swagger_ui": f"{request.base_url}api/v1/docs",
+            "redoc": f"{request.base_url}api/v1/redoc",
+            "openapi_json": f"{request.base_url}api/v1/openapi.json"
+        },
+        "endpoints": {
+            "aeds": f"{request.base_url}api/v1/aeds",
+            "reports": f"{request.base_url}api/v1/reports",
+            "utilities": f"{request.base_url}api/v1/utils"
+        },
+        "request_id": request.state.request_id,
+        "timestamp": datetime.now().isoformat()
+    }
 
 # Startup event to load data automatically when the app starts
 @app.on_event("startup")

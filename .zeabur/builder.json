@@ -1,0 +1,10 @@
+{
+  "buildpacks": [
+    {
+      "id": "heroku/python"
+    }
+  ],
+  "env": {
+    "PYTHONUNBUFFERED": "1"
+  }
+}

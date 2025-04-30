@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.so
 .Python
+env/
 build/
 develop-eggs/
 dist/
@@ -15,53 +16,39 @@ lib64/
 parts/
 sdist/
 var/
-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# Virtual environments
+# Virtual Environment
 venv/
-env/
 ENV/
-.venv/
-.env/
+env/
 
 # IDE files
 .idea/
 .vscode/
 *.swp
 *.swo
-.DS_Store
 
-# Database files
-*.db
+# Database
 *.sqlite3
-*.sqlite
+*.db
 
 # Logs
-logs/
 *.log
 
-# Local environment settings
+# Local configuration
 .env
-.env.*
+.env.local
 
-# Docker volumes
-postgres_data/
-pgadmin_data/
+# Docker
+.docker/
+docker-volumes/
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# Zeabur specific
+.zeabur/storage/
 
-# Coverage reports
-htmlcov/
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
+# OS specific
+.DS_Store
+Thumbs.db
