@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from sqlalchemy import text, func
+from typing import Dict, Any, List
 from datetime import datetime
 import requests
 import pandas as pd
 import logging
 import time
-from app.database import get_db, AEDModel, AEDReportModel
+from app.database import get_db, AEDModel, AEDReportModel, SessionLocal
 from app.models import AED, AEDWithDistance, AEDReportCreate, AEDReport
 from app.utils import headers, url
 

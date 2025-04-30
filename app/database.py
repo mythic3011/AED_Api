@@ -4,13 +4,25 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from geoalchemy2 import Geography
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost/aed_db")
+# Get DB connection details from environment variables
+DB_USER = os.environ.get("DB_USER", "postgres")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "postgres")
+DB_HOST = os.environ.get("DB_HOST", "db")
+DB_NAME = os.environ.get("DB_NAME", "aed_db")
+
+# Construct the database URL
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", 
+    f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
+)
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 def get_superuser_engine():
-    superuser_url = os.environ.get("SUPERUSER_DATABASE_URL", "postgresql://postgres:postgres@localhost/aed_db")
+    postgres_superuser = os.environ.get("POSTGRES_SUPERUSER", "postgres")
+    postgres_superuser_password = os.environ.get("POSTGRES_SUPERUSER_PASSWORD", "postgres")
+    superuser_url = f"postgresql://{postgres_superuser}:{postgres_superuser_password}@{DB_HOST}/{DB_NAME}"
     return create_engine(superuser_url)
 
 def setup_postgis():

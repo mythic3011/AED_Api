@@ -8,7 +8,16 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Database connection
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost/aed_db")
+# Get connection parameters from environment variables with Docker-compatible defaults
+DB_USER = os.environ.get("DB_USER", "postgres")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "postgres")
+DB_HOST = os.environ.get("DB_HOST", "db")  # Use 'db' as default for Docker
+DB_NAME = os.environ.get("DB_NAME", "aed_db")
+
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", 
+    f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
+)
 engine = create_engine(DATABASE_URL)
 
 def run_migration():

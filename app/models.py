@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field, EmailStr, validator
-from typing import Optional
+from pydantic import BaseModel, Field, validator
+from typing import Optional, List
 
 class AED(BaseModel):
     id: Optional[int] = None

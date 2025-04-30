@@ -2,14 +2,18 @@ import os
 import time
 import uuid
 import logging
+import requests
+import pandas as pd
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 from fastapi import FastAPI, HTTPException, Depends, Request, Security, BackgroundTasks
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from app.database import get_db, setup_postgis
+from sqlalchemy import text, func
+from app.database import get_db, setup_postgis, SessionLocal, AEDModel
+from app.utils import headers, url
 from app.routes import aeds, reports
 
 # Configure logging
@@ -28,7 +32,6 @@ app = FastAPI(
     docs_url="/api/v1/docs",
     redoc_url="/api/v1/redoc",
     openapi_url="/api/v1/openapi.json",
-    swagger_ui_parameters={"persistAuthorization": True},
 )
 
 # Set up CORS middleware to allow cross-origin requests
@@ -39,6 +42,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Simple rate limiting implementation
 class RateLimiter:
@@ -137,11 +141,18 @@ setup_postgis()
 app.include_router(aeds.router, prefix="/api/v1/aeds", tags=["AEDs"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
 
+# Root redirect to API documentation
+@app.get("/", include_in_schema=False)
+async def root_redirect():
+    """Redirect root path to API documentation"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/api/v1/docs")
+
 # Startup event to load data automatically when the app starts
 @app.on_event("startup")
 async def startup_event():
     """Load AED data when the application starts"""
-    db = SessionLocal()
+    db = SessionLocal()  # Create a new session by calling the sessionmaker
     try:
         # Check if data exists
         count = db.query(func.count(AEDModel.id)).scalar()

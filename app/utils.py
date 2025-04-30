@@ -1,5 +1,12 @@
 import pandas as pd
 
+# API configuration for external data source
+url = "https://data.gov.hk/tc-data/dataset/hk-fsd-aed/resource/44398ad7-8a54-4220-9ecb-e4e74fee97e6/download/aedc.csv"
+headers = {
+    "User-Agent": "AEDEnrichmentService/1.0",
+    "Accept": "text/csv",
+}
+
 # Utility function to handle CSV data and map columns
 def handle_csv_data(response_text: str):
     try:
