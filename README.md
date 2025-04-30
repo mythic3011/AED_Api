@@ -115,10 +115,11 @@ API documentation is available at:
 
 This project can be easily deployed to [Zeabur](https://zeabur.com/), a modern cloud platform.
 
-1. Create an account on Zeabur and install the CLI:
+1. Create an account on Zeabur and install the CLI and required tools:
 
 ```bash
 npm install -g zeabur-cli
+brew install jq  # Required for JSON parsing in the deployment script
 ```
 
 2. Log in to Zeabur:
@@ -129,7 +130,7 @@ zeabur login
 
 3. Set the environment variables in a `.env` file (do not commit this file):
 
-```
+```env
 DATABASE_URL=postgresql://user:password@host/dbname
 DB_USER=postgres
 DB_PASSWORD=yourpassword
@@ -141,9 +142,37 @@ POSTGRES_SUPERUSER_PASSWORD=superuserpassword
 
 4. Run the deployment script:
 
+**Option 1: Advanced deployment with environment variable management**
+
 ```bash
+source .env  # Load environment variables
 ./deploy-zeabur.sh
 ```
+
+The script will:
+
+- Create a new project named "aed-location-api" if it doesn't exist
+- Deploy your service to Zeabur
+- Set up all required environment variables
+- Expose the service to a public URL
+
+**Option 2: Simple deployment (recommended for beginners)**
+
+```bash
+./deploy-simple.sh
+```
+
+This simpler script:
+
+- Has fewer dependencies (no jq required)
+- Deploys the current directory to Zeabur
+- Prompts for database connection if needed
+- Provides clear instructions for next steps
+
+### Setting up PostgreSQL on Zeabur
+
+For the AED API to work correctly, you'll need a PostgreSQL database with PostGIS extension.
+See the [PostgreSQL Setup Guide](docs/zeabur-postgres-setup.md) for detailed instructions on setting up a PostgreSQL database on Zeabur.
 
 Alternatively, you can deploy directly from the Zeabur dashboard by connecting your GitHub repository.
 

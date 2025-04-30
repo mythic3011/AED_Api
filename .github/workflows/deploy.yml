@@ -27,7 +27,8 @@ jobs:
           # pytest
 
       - name: Deploy to Zeabur
-        uses: zeabur/action-deploy@v1
+        uses: zeabur/action-deploy@v1.1.0
         with:
           zeabur-token: ${{ secrets.ZEABUR_TOKEN }}
           project-id: ${{ secrets.ZEABUR_PROJECT_ID }}
+          service-path: ./

@@ -42,6 +42,20 @@ async def health_check(request: Request, db: Session = Depends(get_db)):
         db_error = str(e)
         logger.error(f"Database health check failed: {e}")
     
+    # Check for Zeabur-specific environment variables
+    deployment_info = {
+        "platform": "development"
+    }
+    
+    # Check if running on Zeabur
+    if os.environ.get("ZEABUR_SERVICE_ID"):
+        deployment_info = {
+            "platform": "zeabur",
+            "service_id": os.environ.get("ZEABUR_SERVICE_ID"),
+            "service_name": os.environ.get("ZEABUR_SERVICE_NAME", "AED API"),
+            "project_id": os.environ.get("ZEABUR_PROJECT_ID")
+        }
+    
     response = {
         "status": "healthy" if db_status == "healthy" else "unhealthy",
         "timestamp": datetime.now().isoformat(),
@@ -55,7 +69,8 @@ async def health_check(request: Request, db: Session = Depends(get_db)):
                 "status": db_status,
                 "error": db_error
             }
-        }
+        },
+        "deployment": deployment_info
     }
     
     return response
@@ -419,7 +434,6 @@ async def get_recent_logs(
     try:
         # Simple in-memory log retrieval for now
         # In a production environment, this should retrieve from proper log storage
-        log_buffer = []
         log_level_filter = None
         
         # Set log level filter based on request
@@ -468,6 +482,49 @@ async def get_recent_logs(
             status_code=500,
             detail=f"Error retrieving logs: {str(e)}"
         )
+
+
+@router.get("/zeabur-verify", response_model=Dict[str, Any])
+async def zeabur_verification(request: Request):
+    """
+    Special endpoint to verify Zeabur deployment is working correctly.
+    
+    Returns information specific to Zeabur deployment, including environment
+    variables and service information.
+    """
+    # Get Zeabur-specific environment variables
+    zeabur_vars = {k: v for k, v in os.environ.items() if k.startswith("ZEABUR_")}
+    
+    # Get basic system information
+    system_info = {
+        "hostname": platform.node(),
+        "platform": platform.platform(),
+        "python_version": platform.python_version(),
+        "memory_usage_percent": psutil.virtual_memory().percent
+    }
+    
+    # Check database configuration (without connecting)
+    db_config = {
+        "db_host": os.environ.get("DB_HOST"),
+        "db_name": os.environ.get("DB_NAME"),
+        "db_user": os.environ.get("DB_USER"),
+        "has_db_password": "Yes" if os.environ.get("DB_PASSWORD") else "No",
+        "connection_string_format": os.environ.get("DATABASE_URL", "").split("@")[0].split(":")[0] 
+                                    if os.environ.get("DATABASE_URL") else "Not set"
+    }
+    
+    return {
+        "status": "success",
+        "message": "Zeabur deployment verification",
+        "timestamp": datetime.now().isoformat(),
+        "request_id": request.state.request_id,
+        "zeabur": {
+            "detected": bool(zeabur_vars),
+            "environment_variables": list(zeabur_vars.keys())
+        },
+        "system": system_info,
+        "database_config": db_config
+    }
 
 
 def _format_uptime(seconds: int) -> str:

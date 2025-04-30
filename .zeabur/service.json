@@ -1,0 +1,54 @@
+{
+  "deploy": {
+    "type": "python",
+    "engine": "uvicorn",
+    "module": "app.main:app",
+    "host": "0.0.0.0",
+    "port": "PORT"
+  },
+  "build": {
+    "buildCommand": "pip install -r requirements.txt"
+  },
+  "envs": [
+    {
+      "key": "DATABASE_URL",
+      "value": "",
+      "description": "PostgreSQL connection string"
+    },
+    {
+      "key": "DB_USER",
+      "value": "postgres",
+      "description": "PostgreSQL username"
+    },
+    {
+      "key": "DB_PASSWORD",
+      "value": "",
+      "description": "PostgreSQL password"
+    },
+    {
+      "key": "DB_NAME",
+      "value": "aed_db",
+      "description": "PostgreSQL database name"
+    },
+    {
+      "key": "DB_HOST",
+      "value": "",
+      "description": "PostgreSQL host address"
+    },
+    {
+      "key": "POSTGRES_SUPERUSER",
+      "value": "postgres",
+      "description": "PostgreSQL superuser for PostGIS setup"
+    },
+    {
+      "key": "POSTGRES_SUPERUSER_PASSWORD",
+      "value": "",
+      "description": "PostgreSQL superuser password"
+    }
+  ],
+  "health": {
+    "path": "/api/v1/utils/health",
+    "interval": "30s",
+    "timeout": "10s"
+  }
+}

@@ -1,6 +1,7 @@
 {
   "name": "aed-location-api",
   "type": "python",
+  "pythonVersion": "3.9",
   "buildCommand": "pip install -r requirements.txt",
   "startCommand": "python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT",
   "env": {
@@ -17,5 +18,18 @@
       "path": "/",
       "type": "http"
     }
-  ]
+  ],
+  "health": {
+    "path": "/api/v1/utils/health",
+    "interval": "30s",
+    "timeout": "10s"
+  },
+  "scale": {
+    "min": 1,
+    "max": 3
+  },
+  "resources": {
+    "cpu": 0.5,
+    "memory": "512Mi"
+  }
 }
