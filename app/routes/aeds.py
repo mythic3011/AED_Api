@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
+from sqlalchemy.exc import OperationalError, DatabaseError
 from typing import Dict, Any, List
 from datetime import datetime
 import requests
@@ -166,87 +167,89 @@ async def get_nearby_aeds(
     Returns a list of AEDs sorted by distance from the specified coordinates,
     with distance information included for each AED.
     """
-    # Validate parameters
-    if radius <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Radius must be greater than zero"
-        )
-        
-    # Build the SQL query with optional public_only filter
-    query_str = """
-        SELECT 
-            id, name, address, location_detail, latitude, longitude, 
-            public_use, allowed_operators, access_persons, category, 
-            service_hours, brand, model, remark,
-            ST_Distance(
-                geo_point::geography,
-                ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
-            )/1000 AS distance_km
-        FROM aeds
-        WHERE ST_DWithin(
-            geo_point::geography,
-            ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
-            :radius * 1000
-        )
-    """
+    from app.database_utils import execute_spatial_query
     
-    # Add public_only filter if requested
-    if public_only:
-        query_str += " AND public_use = true"
-        
-    query_str += " ORDER BY distance_km LIMIT :limit"
-    
-    # Execute query
     try:
-        result = db.execute(
-            text(query_str), 
-            {"lat": lat, "lng": lng, "radius": radius, "limit": limit}
-        ).fetchall()
-    except Exception as e:
-        logger.error(f"Database error: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Error querying database for nearby AEDs"
-        )
-    
-    # Process results
-    aeds_with_distance = []
-    for row in result:
-        aed_dict = {
-            "id": row.id,
-            "name": row.name,
-            "address": row.address,
-            "location_detail": row.location_detail,
-            "latitude": row.latitude,
-            "longitude": row.longitude,
-            "public_use": row.public_use,
-            "allowed_operators": row.allowed_operators,
-            "access_persons": row.access_persons,
-            "category": row.category,
-            "service_hours": row.service_hours,
-            "brand": row.brand,
-            "model": row.model,
-            "remark": row.remark,
-            "distance_km": row.distance_km
-        }
-        aeds_with_distance.append(AEDWithDistance(**aed_dict))
-    
-    return {
-        "data": aeds_with_distance,
-        "metadata": {
-            "request_id": request.state.request_id,
-            "timestamp": datetime.now().isoformat(),
-            "search": {
-                "latitude": lat,
-                "longitude": lng,
-                "radius_km": radius,
-                "limit": limit,
-                "public_only": public_only,
-                "results_found": len(aeds_with_distance)
+        # Build the SQL query with optional public_only filter
+        query_str = """
+            SELECT 
+                id, name, address, location_detail, latitude, longitude, 
+                public_use, allowed_operators, access_persons, category, 
+                service_hours, brand, model, remark,
+                ST_Distance(
+                    geo_point::geography,
+                    ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
+                )/1000 AS distance_km
+            FROM aeds
+            WHERE ST_DWithin(
+                geo_point::geography,
+                ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                :radius * 1000
+            )
+        """
+        
+        # Add public_only filter if requested
+        if public_only:
+            query_str += " AND public_use = true"
+            
+        query_str += " ORDER BY distance_km LIMIT :limit"
+        
+        # Prepare parameters
+        query_params = {"lat": lat, "lng": lng, "radius": radius, "limit": limit}
+        
+        # Execute the query with our utility function that handles errors
+        result = execute_spatial_query(db, query_str, query_params)
+        
+        # Process results
+        aeds_with_distance = []
+        for row in result:
+            aed_dict = {
+                "id": row.id,
+                "name": row.name,
+                "address": row.address,
+                "location_detail": row.location_detail,
+                "latitude": row.latitude,
+                "longitude": row.longitude,
+                "public_use": row.public_use,
+                "allowed_operators": row.allowed_operators,
+                "access_persons": row.access_persons,
+                "category": row.category,
+                "service_hours": row.service_hours,
+                "brand": row.brand,
+                "model": row.model,
+                "remark": row.remark,
+                "distance_km": row.distance_km
+            }
+            aeds_with_distance.append(AEDWithDistance(**aed_dict))
+        
+        # Successfully executed query and processed results, return the data
+        return {
+            "data": aeds_with_distance,
+            "metadata": {
+                "request_id": request.state.request_id,
+                "timestamp": datetime.now().isoformat(),
+                "search": {
+                    "latitude": lat,
+                    "longitude": lng,
+                    "radius_km": radius,
+                    "limit": limit,
+                    "public_only": public_only,
+                    "results_found": len(aeds_with_distance)
+                }
             }
         }
-    }
+            
+    except HTTPException:
+        # Re-raise HTTP exceptions from the execute_spatial_query function
+        raise
+        
+    except Exception as e:
+        # Catch-all for unexpected errors
+        logger.error(f"Unexpected error in nearby AEDs endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while processing your request."
+        )
 
 @router.get("/sorted-by-location", response_model=List[AEDWithDistance])
 async def get_aeds_sorted_by_location(lat: float, lng: float, limit: int = 100, db: Session = Depends(get_db)):

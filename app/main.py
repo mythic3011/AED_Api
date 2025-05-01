@@ -11,10 +11,15 @@ from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import OperationalError, DatabaseError
 from sqlalchemy import text, func
 from app.database import get_db, setup_postgis, SessionLocal, AEDModel
 from app.utils import headers, url
 from app.routes import aeds, reports
+from app.database_utils import SQLInjectionError, ConnectionError as DBConnectionError, QueryError
+
+# Explicitly bring SQLAlchemy exceptions into the module scope for the exception handlers
+from sqlalchemy.exc import OperationalError, DatabaseError
 
 # Configure logging
 logging.basicConfig(
@@ -336,6 +341,118 @@ async def startup_event():
             print(f"Database already contains {count} AED records. Skipping initial data load.")
     finally:
         db.close()
+
+
+# Database error handling
+@app.exception_handler(OperationalError)
+async def database_operational_exception_handler(request: Request, exc: OperationalError):
+    """
+    Handle SQLAlchemy operational errors like connection issues
+    """
+    error_msg = str(exc)
+    logger.error(f"RequestID: {request.state.request_id} | Database OperationalError: {error_msg}")
+    
+    # Create user-friendly error message
+    if "does not exist" in error_msg:
+        detail = "The database does not exist or has not been properly set up."
+        status_code = 503  # Service Unavailable
+    elif "could not connect" in error_msg or "connection" in error_msg.lower():
+        detail = "Could not connect to the database server. Please try again later."
+        status_code = 503  # Service Unavailable
+    elif "server closed the connection unexpectedly" in error_msg:
+        detail = "The database connection was lost. Please try again later."
+        status_code = 503  # Service Unavailable
+    elif "syntax error" in error_msg.lower() or "invalid input syntax" in error_msg.lower():
+        detail = "Invalid parameter format in database query. Please check your input."
+        status_code = 400  # Bad Request
+    else:
+        detail = "A database operational error occurred. Please try again later."
+        status_code = 500  # Internal Server Error
+    
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "detail": detail,
+            "type": "database_error",
+            "request_id": request.state.request_id
+        }
+    )
+
+@app.exception_handler(DatabaseError)
+async def database_exception_handler(request: Request, exc: DatabaseError):
+    """
+    Handle general SQLAlchemy database errors
+    """
+    error_msg = str(exc)
+    logger.error(f"RequestID: {request.state.request_id} | DatabaseError: {error_msg}")
+    
+    # Check for specific types of errors
+    if "invalid input syntax" in error_msg:
+        detail = "Invalid parameter format. Please check your input values."
+        status_code = 400  # Bad Request
+    elif "violates" in error_msg and "constraint" in error_msg:
+        detail = "The operation could not be completed due to data constraints."
+        status_code = 400  # Bad Request
+    else:
+        detail = "A database error occurred while processing your request."
+        status_code = 500  # Internal Server Error
+    
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "detail": detail,
+            "type": "database_error",
+            "request_id": request.state.request_id
+        }
+    )
+
+@app.exception_handler(SQLInjectionError)
+async def sql_injection_exception_handler(request: Request, exc: SQLInjectionError):
+    """
+    Handle potential SQL injection attempts
+    """
+    logger.warning(f"RequestID: {request.state.request_id} | SQL Injection attempt detected: {str(exc)}")
+    
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": "Invalid input with potentially unsafe characters detected.",
+            "type": "security_error",
+            "request_id": request.state.request_id
+        }
+    )
+
+@app.exception_handler(DBConnectionError)
+async def db_connection_exception_handler(request: Request, exc: DBConnectionError):
+    """
+    Handle custom database connection errors
+    """
+    logger.error(f"RequestID: {request.state.request_id} | Database ConnectionError: {str(exc)}")
+    
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": str(exc),
+            "type": "connection_error",
+            "request_id": request.state.request_id
+        }
+    )
+
+@app.exception_handler(QueryError)
+async def query_exception_handler(request: Request, exc: QueryError):
+    """
+    Handle custom query errors
+    """
+    logger.error(f"RequestID: {request.state.request_id} | QueryError: {str(exc)}")
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": str(exc),
+            "type": "query_error",
+            "request_id": request.state.request_id
+        }
+    )
 
 
 if __name__ == "__main__":

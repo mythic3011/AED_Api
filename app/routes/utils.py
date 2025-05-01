@@ -6,14 +6,17 @@ These routes provide system information, health status, and other utility functi
 from fastapi import APIRouter, Request, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
+from sqlalchemy.exc import OperationalError, DatabaseError
 import platform
 import psutil
 import os
 import time
+import sys
+import socket
 from datetime import datetime
 from typing import Dict, Any, List
 import logging
-from app.database import get_db, AEDModel, AEDReportModel, SessionLocal
+from app.database import get_db, AEDModel, AEDReportModel, SessionLocal, DB_HOST, DB_NAME
 
 router = APIRouter()
 logger = logging.getLogger("aed_api")
@@ -33,14 +36,41 @@ async def health_check(request: Request, db: Session = Depends(get_db)):
     # Check database connection
     db_status = "healthy"
     db_error = None
+    connection_details = {}
     
     try:
-        # Simple query to test database connection
-        db.execute(text("SELECT 1")).fetchone()
+        # Import the needed modules here to avoid circular imports
+        from sqlalchemy.exc import OperationalError, DatabaseError
+        import os
+        from app.database import DB_HOST, DB_NAME
+        
+        # Query database version information
+        result = db.execute(text("SELECT version()")).fetchone()
+        db_version = result[0] if result else "Unknown"
+        
+        # Get connection details - safely extract info without exposing credentials
+        connection_details = {
+            "host": DB_HOST,
+            "database": DB_NAME,
+            "version": db_version
+        }
+        
+    except (OperationalError, DatabaseError) as e:
+        db_status = "unhealthy"
+        db_error = f"Database connection error: {str(e)}"
+        logger.error(f"Database health check failed (DB Error): {e}")
+        
+        # Provide useful connection troubleshooting info
+        connection_details = {
+            "host": DB_HOST,
+            "database": DB_NAME,
+            "error_type": type(e).__name__
+        }
+        
     except Exception as e:
         db_status = "unhealthy"
-        db_error = str(e)
-        logger.error(f"Database health check failed: {e}")
+        db_error = f"Health check error: {str(e)}"
+        logger.error(f"Database health check failed (General Error): {e}")
     
     # Check for Zeabur-specific environment variables
     deployment_info = {
@@ -56,6 +86,13 @@ async def health_check(request: Request, db: Session = Depends(get_db)):
             "project_id": os.environ.get("ZEABUR_PROJECT_ID")
         }
     
+    # Add retry guidance if database is unhealthy
+    remediation = None
+    if db_status == "unhealthy":
+        remediation = {
+            "suggestion": "The application will automatically attempt to reconnect to the database. If the issue persists, check database configuration and connectivity."
+        }
+    
     response = {
         "status": "healthy" if db_status == "healthy" else "unhealthy",
         "timestamp": datetime.now().isoformat(),
@@ -67,11 +104,19 @@ async def health_check(request: Request, db: Session = Depends(get_db)):
             },
             "database": {
                 "status": db_status,
-                "error": db_error
+                "connection": connection_details,
+                "error": db_error,
+                "remediation": remediation
             }
         },
         "deployment": deployment_info
     }
+    
+    # Set appropriate status code
+    if db_status == "unhealthy":
+        # Return a 200 status still to avoid triggering alerts
+        # The payload will indicate unhealthy status
+        pass
     
     return response
 
