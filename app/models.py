@@ -1,4 +1,5 @@
-from pydantic import BaseModel, Field, validator
+# filepath: /Users/mythic3013/NetBeansProjects/enrichment/app/models.py
+from pydantic import BaseModel, Field, validator, EmailStr
 from typing import Optional, List
 
 class AED(BaseModel):
@@ -44,8 +45,15 @@ class AEDReportCreate(BaseModel):
     report_type: str  # damaged, missing, incorrect_info, other
     description: str
     reporter_name: Optional[str] = None
-    reporter_email: Optional[str] = None
+    reporter_email: Optional[EmailStr] = None
     reporter_phone: Optional[str] = None
+    
+    @validator('report_type')
+    def validate_report_type(cls, v):
+        valid_types = ["damaged", "missing", "incorrect_info", "other"]
+        if v not in valid_types:
+            raise ValueError(f"Invalid report type. Must be one of: {', '.join(valid_types)}")
+        return v
 
 class AEDReport(AEDReportCreate):
     id: int

@@ -5,13 +5,12 @@ services:
     image: postgis/postgis:14-3.2
     container_name: aed-postgres
     environment:
-      - POSTGRES_USER=${DB_USER:-postgres}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
-      - POSTGRES_DB=${DB_NAME:-aed_db}
-      - POSTGRES_SUPERUSER=${POSTGRES_SUPERUSER:-postgres}
-      - POSTGRES_SUPERUSER_PASSWORD=${POSTGRES_SUPERUSER_PASSWORD:-postgres}
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=aed_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
     ports:
       - "5432:5432"
     healthcheck:
@@ -32,25 +31,27 @@ services:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db/${DB_NAME:-aed_db}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      - DB_NAME=${DB_NAME:-aed_db}
+      - DATABASE_URL=postgresql://postgres:postgres@db/aed_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=aed_db
       - DB_HOST=db
-      - POSTGRES_SUPERUSER=${POSTGRES_SUPERUSER:-postgres}
-      - POSTGRES_SUPERUSER_PASSWORD=${POSTGRES_SUPERUSER_PASSWORD:-postgres}
+      - GUNICORN_WORKERS=4
+      - GUNICORN_TIMEOUT=120
+      - PORT=8000
     ports:
       - "8000:8000"
     volumes:
       - ./:/app
       - /app/node_modules
-    command: bash /app/start.sh
+    # We'll use the ENTRYPOINT in Dockerfile instead of specifying command here
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "bash", "/app/api_health_check.sh"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
     networks:
       - aed-network
 

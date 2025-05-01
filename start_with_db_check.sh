@@ -1,97 +1,52 @@
 #!/bin/bash
-set -e
+# Script to check database connectivity before starting the application
 
-# Function to check if database is available
-check_database() {
-  echo "Checking database connection..."
-  python -c "
-import sys
-from sqlalchemy import create_engine
-from sqlalchemy.exc import OperationalError
-import os
+echo "Checking database connectivity..."
 
-# Get DB connection details
-DB_USER = os.environ.get('DB_USER', 'postgres')
-DB_PASSWORD = os.environ.get('DB_PASSWORD', 'postgres')
-DB_HOST = os.environ.get('DB_HOST', 'db')
-DB_NAME = os.environ.get('DB_NAME', 'aed_db')
+MAX_RETRIES=30
+RETRY_INTERVAL=5
+RETRY_COUNT=0
 
-DATABASE_URL = os.environ.get('DATABASE_URL', f'postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}')
-
-try:
-    engine = create_engine(DATABASE_URL)
-    connection = engine.connect()
-    connection.close()
-    print('Database connection successful')
-    sys.exit(0)
-except OperationalError as e:
-    error_str = str(e)
-    
-    # Check for specific errors and provide helpful messages
-    if 'does not exist' in error_str:
-        print('ERROR: Database does not exist')
-        sys.exit(2)
-    elif 'could not connect' in error_str or 'connection' in error_str.lower():
-        print('ERROR: Could not connect to database server')
-        sys.exit(1)
-    else:
-        print(f'ERROR: Database error - {error_str}')
-        sys.exit(3)
-except Exception as e:
-    print(f'ERROR: Unexpected error - {str(e)}')
-    sys.exit(4)
-"
-  return $?
-}
-
-# Function to create database if it doesn't exist
-setup_database() {
-  echo "Setting up database..."
-  PGPASSWORD=$POSTGRES_SUPERUSER_PASSWORD psql -h $DB_HOST -U $POSTGRES_SUPERUSER -c "CREATE DATABASE $DB_NAME;"
-  PGPASSWORD=$POSTGRES_SUPERUSER_PASSWORD psql -h $DB_HOST -U $POSTGRES_SUPERUSER -d $DB_NAME -c "CREATE EXTENSION IF NOT EXISTS postgis;"
-  echo "Database $DB_NAME created successfully"
-}
-
-# Maximum number of retries
-MAX_RETRIES=5
-RETRY_COUNTER=0
-
-# Check if database exists, retry with exponential backoff if connection fails
-while [ $RETRY_COUNTER -lt $MAX_RETRIES ]; do
-  check_database
-  RESULT=$?
-  
-  if [ $RESULT -eq 0 ]; then
-    echo "Database is ready."
-    break
-  elif [ $RESULT -eq 2 ]; then
-    echo "Database does not exist. Setting up..."
-    setup_database
-    # Verify setup was successful
-    check_database
-    if [ $? -ne 0 ]; then
-      echo "Failed to create database. Exiting."
-      exit 1
-    fi
-    break
-  elif [ $RESULT -eq 1 ]; then
-    # Connection error, retry with backoff
-    RETRY_COUNTER=$((RETRY_COUNTER+1))
-    SLEEP_TIME=$((2**RETRY_COUNTER))
-    echo "Connection failed. Retrying in $SLEEP_TIME seconds (attempt $RETRY_COUNTER/$MAX_RETRIES)"
-    sleep $SLEEP_TIME
-  else
-    # Other errors, exit
-    echo "Database setup failed with error $RESULT. Exiting."
-    exit 1
-  fi
-done
-
-if [ $RETRY_COUNTER -eq $MAX_RETRIES ]; then
-  echo "Failed to connect to database after $MAX_RETRIES attempts. Exiting."
-  exit 1
+# Source environment variables if they exist
+if [ -f .env ]; then
+    echo "Loading environment variables from .env"
+    source .env
 fi
 
-# Start the application
-echo "Starting API server..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 ${@}
+# Get database connection parameters from environment variables
+DB_HOST="${DB_HOST:-db}"
+DB_NAME="${DB_NAME:-aed_db}"
+DB_USER="${DB_USER:-postgres}"
+DB_PASSWORD="${DB_PASSWORD:-postgres}"
+
+# Log connection parameters (without credentials)
+echo "Will connect to PostgreSQL at $DB_HOST/$DB_NAME as $DB_USER"
+
+# Function to check if PostgreSQL is ready
+check_postgres() {
+    # Export password to avoid showing it in process list
+    export PGPASSWORD=$DB_PASSWORD
+    psql -h $DB_HOST -U $DB_USER -d $DB_NAME -c "SELECT 1" >/dev/null 2>&1
+    local result=$?
+    unset PGPASSWORD
+    return $result
+}
+
+# Wait for PostgreSQL to be ready
+while ! check_postgres; do
+    RETRY_COUNT=$((RETRY_COUNT+1))
+    
+    if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+        echo "Failed to connect to PostgreSQL after $MAX_RETRIES attempts. Giving up."
+        echo "Please check your database configuration and ensure PostgreSQL is running."
+        exit 1
+    fi
+    
+    echo "PostgreSQL is not ready yet. Waiting $RETRY_INTERVAL seconds... (Attempt $RETRY_COUNT/$MAX_RETRIES)"
+    sleep $RETRY_INTERVAL
+done
+
+echo "Successfully connected to PostgreSQL. Starting application..."
+
+# Start the application with gunicorn
+exec gunicorn app.main:app -w ${GUNICORN_WORKERS:-4} -k uvicorn.workers.UvicornWorker -b 0.0.0.0:${PORT:-8000} --timeout ${GUNICORN_TIMEOUT:-120}

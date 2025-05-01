@@ -39,7 +39,7 @@ app = FastAPI(
 # Set up CORS middleware to allow cross-origin requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -151,6 +151,39 @@ async def root_redirect():
     """Redirect root path to API documentation"""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/api/v1/docs")
+
+@app.get("/api/v1/health", include_in_schema=True)
+async def health_check(request: Request, db: Session = Depends(get_db)):
+    """
+    Health check endpoint for the API
+    
+    Returns the health status of the API, including database connectivity
+    """
+    # Check database connection
+    db_status = "connected"
+    db_error = None
+    
+    try:
+        # Test database connection
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        db_status = "error"
+        db_error = str(e)
+    
+    # Create response
+    health_data = {
+        "status": "healthy" if db_status == "connected" else "unhealthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0.0",
+        "database": {
+            "status": db_status,
+            "error": db_error
+        },
+        "request_id": getattr(request.state, "request_id", "unknown")
+    }
+    
+    status_code = 200 if db_status == "connected" else 503
+    return JSONResponse(content=health_data, status_code=status_code)
 
 @app.get("/api/v1", response_model=Dict[str, Any])
 async def api_info(request: Request):

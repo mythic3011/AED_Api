@@ -139,13 +139,18 @@ def get_db():
         try:
             # Simple query to test connection
             db.execute(text("SELECT 1"))
+            # If we reach here, connection is successful
         except (OperationalError, DatabaseError) as e:
-            # Store the error message on the session for endpoints to check
             error_message = str(e)
-            logger.warning(f"Database connection check failed in get_db(): {error_message}")
             
-            # Set session attribute to indicate connection issues
-            # This can be checked by endpoints to provide appropriate responses
+            # Specific handling for password authentication issues
+            if "password authentication failed" in error_message:
+                logger.error(f"Password authentication failed. Check your database credentials.")
+                # Mark session with authentication error for special handling
+                setattr(db, "_authentication_error", True)
+            
+            # Store the error message on the session for endpoints to check
+            logger.warning(f"Database connection check failed in get_db(): {error_message}")
             setattr(db, "_connection_error", error_message)
             
             # We'll still yield the session rather than failing immediately

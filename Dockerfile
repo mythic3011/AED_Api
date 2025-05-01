@@ -21,7 +21,8 @@ COPY requirements.txt .
 
 # Install all packages from requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir gunicorn uvicorn
 
 # Install zeabur CLI tool
 RUN curl -fsSL https://cli.zeabur.com/install.sh | sh
@@ -31,13 +32,19 @@ COPY . .
 
 # Set environment variables
 ENV DATABASE_URL=postgresql://postgres:postgres@db/aed_db
-ENV POSTGRES_DB=aed_db
-ENV POSTGRES_USER=postgres 
-ENV POSTGRES_PASSWORD=postgres
-ENV SUPERUSER_DATABASE_URL=postgresql://postgres:postgres@db/aed_db
+ENV DB_NAME=aed_db
+ENV DB_USER=postgres 
+ENV DB_PASSWORD=postgres
+ENV DB_HOST=db
 
-# Start PostgreSQL and FastAPI application
-CMD ["sh", "start.sh"]
+# Make all scripts executable
+RUN chmod +x *.sh
+
+# Install gunicorn and uvicorn explicitly to ensure they're available
+RUN pip install --no-cache-dir gunicorn uvicorn
+
+# Use our universal start script that handles all cases
+CMD ["./universal_start.sh"]
 
 # Expose the API port
 EXPOSE 8000
