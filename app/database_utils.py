@@ -229,6 +229,7 @@ def validate_coordinate(value: Any, param_name: str) -> float:
     
     Raises:
         ValueError: If the value is not a valid coordinate
+        SQLInjectionError: If SQL injection is detected
     """
     # Check for None or empty values first
     if value is None:
@@ -240,8 +241,12 @@ def validate_coordinate(value: Any, param_name: str) -> float:
         float_val = float(value)
     elif isinstance(value, str):
         # First check for SQL injection attempts or invalid characters
-        if any(char in value for char in ["'", "\"", ";", "--", "/*", "*/", "\\"]):
-            raise ValueError(f"Invalid characters in {param_name}. Single quotes and special SQL characters are not allowed.")
+        if any(char in value for char in SQL_INJECTION_CHARS):
+            raise SQLInjectionError(
+                message=f"Invalid characters in {param_name}. Single quotes and special SQL characters are not allowed.",
+                param_name=param_name,
+                value=value
+            )
             
         # String that should be convertible to float
         if not value or not re.match(r'^-?\d+(\.\d+)?$', value):
@@ -279,6 +284,7 @@ def validate_numeric_param(value: Any, param_name: str, min_value: Optional[floa
     
     Raises:
         ValueError: If the value is not a valid number or out of range
+        SQLInjectionError: If SQL injection is detected
     """
     # Check for None values
     if value is None:
@@ -290,7 +296,11 @@ def validate_numeric_param(value: Any, param_name: str, min_value: Optional[floa
     elif isinstance(value, str):
         # Check for potentially harmful characters
         if any(char in value for char in SQL_INJECTION_CHARS):
-            raise ValueError(f"Invalid characters in {param_name}. Single quotes and special SQL characters are not allowed.")
+            raise SQLInjectionError(
+                message=f"Invalid characters in {param_name}. Single quotes and special SQL characters are not allowed.",
+                param_name=param_name,
+                value=value
+            )
             
         # Validate numeric format
         if not value or not re.match(r'^-?\d+(\.\d+)?$', value):
@@ -486,41 +496,28 @@ def execute_spatial_query(
     
     # Validate and sanitize parameters to catch issues before hitting the database
     try:
-        sanitized_params = {}
-        for key, value in params.items():
-            try:
-                # First check for SQL injection attempts
-                try:
-                    sanitize_sql_value(value)
-                except SQLInjectionError:
-                    raise ValueError(f"Invalid characters detected in {key} parameter.")
-                
-                # Then apply type-specific validation
-                if key == "lat" or key == "latitude":
-                    sanitized_params[key] = validate_coordinate(value, "latitude")
-                elif key == "lng" or key == "longitude":
-                    sanitized_params[key] = validate_coordinate(value, "longitude")
-                elif key == "radius":
-                    sanitized_params[key] = validate_numeric_param(value, "radius", 0.01, 100.0)
-                elif key == "limit":
-                    sanitized_params[key] = validate_numeric_param(value, "limit", 1, 1000)
-                else:
-                    # For other parameters, still ensure they're safe
-                    if isinstance(value, (int, float, bool)) or value is None:
-                        sanitized_params[key] = value
-                    elif isinstance(value, str):
-                        # Simple strings get passed through but we'll check for SQL injection
-                        sanitized_params[key] = value
-                    else:
-                        raise ValueError(f"Unsupported parameter type for {key}.")
-            except ValueError as param_error:
-                # Convert individual parameter errors to user-friendly message
-                raise ValueError(f"Parameter '{key}': {str(param_error)}")
-                
-    except ValueError as e:
-        # Parameter validation failed
-        logger.warning(f"Parameter validation error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        # Use the centralized parameter sanitization function
+        try:
+            sanitized_params = sanitize_parameters(params)
+        except SQLInjectionError as e:
+            logger.warning(f"SQL injection attempt detected: {e.param_name}={e.value}")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid characters detected in parameter. SQL special characters are not allowed."
+            )
+        except ValueError as e:
+            # Parameter validation failed
+            raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Unexpected errors in parameter validation
+        logger.error(f"Unexpected error during parameter validation: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid parameter format. Please check your input values."
+        )
     
     # Connection retry loop
     retry_count = 0

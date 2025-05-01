@@ -11,15 +11,12 @@ from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import OperationalError, DatabaseError
+from sqlalchemy.exc import OperationalError, DatabaseError, SQLAlchemyError
 from sqlalchemy import text, func
 from app.database import get_db, setup_postgis, SessionLocal, AEDModel
 from app.utils import headers, url
 from app.routes import aeds, reports
 from app.database_utils import SQLInjectionError, ConnectionError as DBConnectionError, QueryError
-
-# Explicitly bring SQLAlchemy exceptions into the module scope for the exception handlers
-from sqlalchemy.exc import OperationalError, DatabaseError
 
 # Configure logging
 logging.basicConfig(
