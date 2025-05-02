@@ -2,15 +2,18 @@ version: "3.9"
 
 services:
   db:
-    image: postgis/postgis:14-3.2
+    image: arm64v8/postgres:14-alpine
     container_name: aed-postgres
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=aed_db
+      - POSTGRES_INITDB_ARGS="--no-sync"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
+      - ./pg_hba.conf:/docker-entrypoint-initdb.d/pg_hba.conf
+      - ./init-postgres.sh:/docker-entrypoint-initdb.d/init-postgres.sh
+      - ./init-postgis.sh:/docker-entrypoint-initdb.d/init-postgis.sh
     ports:
       - "5432:5432"
     healthcheck:
@@ -61,7 +64,8 @@ services:
       - aed-network
 
   pgadmin:
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:7.2
+    platform: linux/arm64
     container_name: aed-pgadmin
     environment:
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-admin@example.com}
