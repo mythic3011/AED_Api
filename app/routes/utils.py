@@ -17,6 +17,7 @@ from datetime import datetime
 from typing import Dict, Any, List
 import logging
 from app.database import get_db, AEDModel, AEDReportModel, SessionLocal, DB_HOST, DB_NAME
+from app.redis_utils import is_redis_available, get_stats as redis_get_stats
 
 router = APIRouter()
 logger = logging.getLogger("aed_api")
@@ -169,16 +170,93 @@ async def system_info(request: Request, db: Session = Depends(get_db)):
         "debug_mode": os.environ.get("DEBUG", "False").lower() == "true"
     }
     
+    # Redis info
+    redis_info = {
+        "available": is_redis_available(),
+        "status": "healthy" if is_redis_available() else "unavailable"
+    }
+    
+    if redis_info["available"]:
+        redis_info.update(redis_get_stats())
+    
     return {
         "timestamp": datetime.now().isoformat(),
         "request_id": request.state.request_id,
         "system": system_info,
         "database": db_stats,
+        "redis": redis_info,
         "environment": env_info,
         "api_uptime_seconds": int(time.time() - SERVER_START_TIME),
         "api_uptime_human": _format_uptime(int(time.time() - SERVER_START_TIME))
     }
 
+
+@router.get("/redis", response_model=Dict[str, Any])
+async def get_redis_info(request: Request):
+    """
+    Get detailed information about Redis cache status.
+    
+    Returns statistics and status information for the Redis cache,
+    useful for monitoring and troubleshooting.
+    """
+    if not is_redis_available():
+        return {
+            "status": "unavailable",
+            "timestamp": datetime.now().isoformat(),
+            "request_id": request.state.request_id,
+            "message": "Redis cache is not available or not configured properly"
+        }
+    
+    # Get Redis statistics
+    stats = redis_get_stats()
+    
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "request_id": request.state.request_id,
+        "statistics": stats,
+        "environment": {
+            "host": os.environ.get("REDIS_HOST", "redis"),
+            "port": os.environ.get("REDIS_PORT", 6379),
+            "ttl": os.environ.get("CACHE_TTL", 3600)
+        }
+    }
+
+@router.get("/redis/flush", response_model=Dict[str, Any])
+async def flush_redis_cache(request: Request):
+    """
+    Flush all data from Redis cache.
+    
+    Clears all cached data in Redis. This endpoint is useful for debugging and
+    troubleshooting when cache needs to be cleared.
+    """
+    from app.redis_utils import redis_client
+    
+    if not is_redis_available():
+        return {
+            "status": "error",
+            "message": "Redis cache is not available",
+            "request_id": request.state.request_id,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    try:
+        result = redis_client.flushdb()
+        success = result is True
+        
+        return {
+            "status": "success" if success else "error",
+            "message": "Redis cache successfully flushed" if success else "Failed to flush Redis cache",
+            "request_id": request.state.request_id,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error flushing Redis cache: {str(e)}",
+            "request_id": request.state.request_id,
+            "timestamp": datetime.now().isoformat()
+        }
 
 @router.get("/stats", response_model=Dict[str, Any])
 async def get_statistics(request: Request, db: Session = Depends(get_db)):

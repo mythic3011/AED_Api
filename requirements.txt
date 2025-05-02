@@ -12,3 +12,6 @@ python-multipart==0.0.6
 email-validator==2.0.0.post2
 python-dotenv==1.0.0
 psutil==5.9.5
+redis==4.5.5
+aioredis==2.0.1
+fastapi-cache2==0.2.1 # Package name is fastapi-cache2, but import is fastapi_cache

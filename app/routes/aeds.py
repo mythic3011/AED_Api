@@ -8,10 +8,13 @@ import requests
 import pandas as pd
 import logging
 import time
+import os
+from fastapi_cache.decorator import cache
 from app.database import get_db, AEDModel, AEDReportModel, SessionLocal
 from app.models import AED, AEDWithDistance, AEDReportCreate, AEDReport
 from app.utils import headers, url
 from app.services.aed_service import update_aed_database
+from app.redis_utils import is_redis_available, delete_pattern
 
 router = APIRouter()
 
@@ -38,6 +41,15 @@ async def refresh_data(
         result = update_aed_database(request.state.request_id)
         logger.info(f"Background refresh task completed with status: {result['status']}")
         
+        # Clear all AED-related caches after refresh
+        if is_redis_available():
+            try:
+                # Clear all AED-related cache entries
+                deleted_keys_count = delete_pattern("aeds*")
+                logger.info(f"Cleared {deleted_keys_count} Redis cache entries after data refresh")
+            except Exception as e:
+                logger.error(f"Error clearing Redis cache: {str(e)}")
+        
     # Start the background task
     background_tasks.add_task(_refresh_data_task)
         
@@ -49,6 +61,7 @@ async def refresh_data(
     }
 
 @router.get("/", response_model=Dict[str, Any])
+@cache(expire=int(os.environ.get("CACHE_TTL", 3600)), namespace="aeds")
 async def get_all_aeds(
     request: Request,
     skip: int = 0, 
@@ -145,6 +158,7 @@ async def get_all_aeds(
     }
 
 @router.get("/nearby", response_model=Dict[str, Any])
+@cache(expire=int(os.environ.get("CACHE_TTL", 3600)), namespace="aeds_nearby")
 async def get_nearby_aeds(
     request: Request,
     lat: float, 
@@ -252,6 +266,7 @@ async def get_nearby_aeds(
         )
 
 @router.get("/sorted-by-location", response_model=List[AEDWithDistance])
+@cache(expire=int(os.environ.get("CACHE_TTL", 3600)), namespace="aeds_sorted")
 async def get_aeds_sorted_by_location(lat: float, lng: float, limit: int = 100, db: Session = Depends(get_db)):
     """Find all AEDs sorted by distance from the given coordinates"""
     query = text("""

@@ -22,7 +22,7 @@ COPY requirements.txt .
 # Install all packages from requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir gunicorn uvicorn
+    pip install --no-cache-dir fastapi-cache2 gunicorn uvicorn fastapi-cache2
 
 # Install zeabur CLI tool
 RUN curl -fsSL https://cli.zeabur.com/install.sh | sh
@@ -41,7 +41,7 @@ ENV DB_HOST=db
 RUN chmod +x *.sh
 
 # Install gunicorn and uvicorn explicitly to ensure they're available
-RUN pip install --no-cache-dir gunicorn uvicorn
+RUN pip install --no-cache-dir fastapi-cache2 gunicorn uvicorn
 
 # Use our universal start script that handles all cases
 CMD ["./universal_start.sh"]

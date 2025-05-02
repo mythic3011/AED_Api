@@ -13,10 +13,14 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError, DatabaseError, SQLAlchemyError
 from sqlalchemy import text, func
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache.decorator import cache
 from app.database import get_db, setup_postgis, SessionLocal, AEDModel
 from app.utils import headers, url
 from app.routes import aeds, reports
 from app.database_utils import SQLInjectionError, ConnectionError as DBConnectionError, QueryError
+from app.redis_utils import redis_client, is_redis_available
 
 # Configure logging
 logging.basicConfig(
@@ -157,7 +161,7 @@ async def health_check(request: Request, db: Session = Depends(get_db)):
     """
     Health check endpoint for the API
     
-    Returns the health status of the API, including database connectivity
+    Returns the health status of the API, including database and Redis connectivity
     """
     # Check database connection
     db_status = "connected"
@@ -170,19 +174,25 @@ async def health_check(request: Request, db: Session = Depends(get_db)):
         db_status = "error"
         db_error = str(e)
     
+    # Check Redis connection
+    redis_status = "connected" if is_redis_available() else "error"
+    
     # Create response
     health_data = {
-        "status": "healthy" if db_status == "connected" else "unhealthy",
+        "status": "healthy" if (db_status == "connected" and redis_status == "connected") else "unhealthy",
         "timestamp": datetime.now().isoformat(),
         "version": "1.0.0",
         "database": {
             "status": db_status,
             "error": db_error
         },
+        "redis": {
+            "status": redis_status
+        },
         "request_id": getattr(request.state, "request_id", "unknown")
     }
     
-    status_code = 200 if db_status == "connected" else 503
+    status_code = 200 if (db_status == "connected" and redis_status == "connected") else 503
     return JSONResponse(content=health_data, status_code=status_code)
 
 @app.get("/api/v1", response_model=Dict[str, Any])
@@ -214,7 +224,21 @@ async def api_info(request: Request):
 # Startup event to load data automatically when the app starts
 @app.on_event("startup")
 async def startup_event():
-    """Load AED data when the application starts"""
+    """Load AED data when the application starts and initialize Redis cache"""
+    # Initialize Redis cache
+    try:
+        if is_redis_available():
+            FastAPICache.init(
+                RedisBackend(redis_client),
+                prefix="aed-cache:",
+                expire=int(os.environ.get("CACHE_TTL", 3600))
+            )
+            print("Redis cache initialized successfully")
+        else:
+            print("Redis server is not available. Caching will be disabled.")
+    except Exception as e:
+        print(f"Failed to initialize Redis cache: {str(e)}")
+        
     db = SessionLocal()  # Create a new session by calling the sessionmaker
     try:
         # Check if data exists

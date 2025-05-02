@@ -30,12 +30,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db/aed_db
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_NAME=aed_db
       - DB_HOST=db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CACHE_TTL=3600
       - GUNICORN_WORKERS=4
       - GUNICORN_TIMEOUT=120
       - PORT=8000
@@ -72,6 +77,22 @@ services:
     networks:
       - aed-network
 
+  redis:
+    image: redis:alpine
+    container_name: aed-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    networks:
+      - aed-network
+
 networks:
   aed-network:
     driver: bridge
@@ -79,3 +100,4 @@ networks:
 volumes:
   postgres_data:
   pgadmin_data:
+  redis_data:
