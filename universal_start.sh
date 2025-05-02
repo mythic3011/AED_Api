@@ -75,14 +75,18 @@ start_with_gunicorn() {
     echo "Attempting to start with gunicorn..."
     
     # Try standard configuration
-    if gunicorn app.main:app -w $GUNICORN_WORKERS -k uvicorn.workers.UvicornWorker -b 0.0.0.0:$PORT --timeout $GUNICORN_TIMEOUT; then
-        return 0
-    fi
-    
-    echo "⚠️ Standard gunicorn configuration failed, trying simple configuration..."
-    # Try simple configuration
-    if gunicorn app.main:app -b 0.0.0.0:$PORT; then
-        return 0
+    if command -v gunicorn >/dev/null 2>&1; then
+        if gunicorn app.main:app -w $GUNICORN_WORKERS -k uvicorn.workers.UvicornWorker -b 0.0.0.0:$PORT --timeout $GUNICORN_TIMEOUT; then
+            return 0
+        fi
+        
+        echo "⚠️ Standard gunicorn configuration failed, trying simple configuration..."
+        # Try simple configuration
+        if gunicorn app.main:app -b 0.0.0.0:$PORT; then
+            return 0
+        fi
+    else
+        echo "⚠️ Gunicorn not found in PATH"
     fi
     
     return 1
@@ -99,8 +103,7 @@ start_with_uvicorn() {
 if command -v gunicorn &>/dev/null; then
     start_with_gunicorn || start_with_uvicorn
 elif command -v uvicorn &>/dev/null; then
-    start_with_uvicorn
-else
+    else
     echo "⚠️ Neither gunicorn nor uvicorn found. Installing requirements..."
     pip install -r requirements.txt
     
